@@ -2,6 +2,8 @@ import sys
 import os
 import pygame
 from halfEdge import HalfEdgeMesh
+import tkinter as tk
+from tkinter import filedialog
 
 # Configuration\ nWINDOW_WIDTH = 800
 WINDOW_WIDTH = 800
@@ -18,7 +20,7 @@ FPS = 60
 
 # Primitive buttons configuration\ n
 
-PRIMITIVES = ["Triangle", "Rectangle"]
+MENU_ITEMS = ["Open", "Triangle", "Rectangle"]
 BUTTON_PADDING = 10
 BUTTON_SPACING = 10
 
@@ -28,6 +30,17 @@ def load_mesh(filepath):
     mesh.load_obj(filepath)
     return mesh
 
+
+def open_obj():
+    file_path = filedialog.askopenfilename(title="Open OBJ File",
+                                           filetypes=[("OBJ Files", "*.obj")])
+    if file_path:
+        try:
+            mesh = load_mesh(file_path)
+            project = compute_projection(mesh.vertices, WINDOW_WIDTH, WINDOW_HEIGHT)
+            return mesh, project
+        except Exception as e:
+            print(f"Failed to load mesh: {e}")
 
 def compute_projection(vertices, width, height, margin=20):
     """
@@ -58,7 +71,7 @@ def create_buttons(font):
     buttons = []
     x = BUTTON_PADDING
     y = (MENU_HEIGHT - font.get_height()) // 2
-    for name in PRIMITIVES:
+    for name in MENU_ITEMS:
         text_surf = font.render(name, True, TEXT_COLOR)
         btn_rect = pygame.Rect(x, 0, text_surf.get_width() + 2 * BUTTON_PADDING, MENU_HEIGHT)
         buttons.append((name, btn_rect, text_surf))
@@ -67,16 +80,18 @@ def create_buttons(font):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python pygame_halfedge_ui.py <path_to_obj_file>")
-        sys.exit(1)
+    #if len(sys.argv) < 2:
+    #    print("Usage: python pygame_halfedge_ui.py <path_to_obj_file>")
+    #    sys.exit(1)
 
-    obj_path = sys.argv[1]
-    if not os.path.exists(obj_path):
-        print(f"File not found: {obj_path}")
-        sys.exit(1)
+    #obj_path = sys.argv[1]
+    #if not os.path.exists(obj_path):
+    #    print(f"File not found: {obj_path}")
+    #    sys.exit(1)
 
-    mesh = load_mesh(obj_path)
+    mesh = None
+
+
 
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -84,7 +99,7 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont(None, 24)
 
-    project = compute_projection(mesh.vertices, WINDOW_WIDTH, WINDOW_HEIGHT)
+    #project = compute_projection(mesh.vertices, WINDOW_WIDTH, WINDOW_HEIGHT)
     buttons = create_buttons(font)
 
     running = True
@@ -96,8 +111,14 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 for name, rect, _ in buttons:
                     if rect.collidepoint(mouse_pos):
-                        print(f"Button '{name}' clicked - functionality not yet implemented")
-
+                        match name:
+                            case "Open":
+                                mesh, project = open_obj()
+                            case "Triangle":
+                                print(f"Button '{name}' clicked - functionality not yet implemented")
+                            case "Rectangle":
+                                print(f"Button '{name}' clicked - functionality not yet implemented")
+                    
         # Draw background
         screen.fill(BG_COLOR)
 
@@ -108,20 +129,21 @@ def main():
             pygame.draw.rect(screen, color, rect)
             screen.blit(text_surf, (rect.x + BUTTON_PADDING, (MENU_HEIGHT - text_surf.get_height()) // 2))
 
-        # Draw edges
-        for (o_idx, d_idx), he in mesh.edge_map.items():
-            # Draw each directed edge once
-            if o_idx < d_idx:
-                v1 = mesh.vertices[o_idx - 1]
-                v2 = mesh.vertices[d_idx - 1]
-                p1 = project(v1)
-                p2 = project(v2)
-                pygame.draw.line(screen, EDGE_COLOR, p1, p2, 2)
+        if mesh:
+            # Draw edges
+            for (o_idx, d_idx), he in mesh.edge_map.items():
+                # Draw each directed edge once
+                if o_idx < d_idx:
+                    v1 = mesh.vertices[o_idx - 1]
+                    v2 = mesh.vertices[d_idx - 1]
+                    p1 = project(v1)
+                    p2 = project(v2)
+                    pygame.draw.line(screen, EDGE_COLOR, p1, p2, 2)
 
-        # Draw vertices
-        for v in mesh.vertices:
-            p = project(v)
-            pygame.draw.circle(screen, VERTEX_COLOR, p, 5)
+            # Draw vertices
+            for v in mesh.vertices:
+                p = project(v)
+                pygame.draw.circle(screen, VERTEX_COLOR, p, 5)
 
         pygame.display.flip()
         clock.tick(FPS)
