@@ -1,14 +1,16 @@
 import sys
 import os
-import pygame
 from halfEdge import HalfEdgeMesh
 import tkinter as tk
 from tkinter import filedialog
+from MatrizResultante import Matrizes
+import numpy as np
 
 # Configuration\ nWINDOW_WIDTH = 800
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 MENU_HEIGHT = 40
+INPUT_HEIGHT = 30
 BG_COLOR = (30, 30, 30)
 MENU_COLOR = (50, 50, 50)
 VERTEX_COLOR = (255, 200, 0)
@@ -17,139 +19,130 @@ BUTTON_COLOR = (80, 80, 80)
 BUTTON_HOVER_COLOR = (100, 100, 100)
 TEXT_COLOR = (255, 255, 255)
 FPS = 60
+INPUT_BG_COLOR = (40, 40, 40)
+INPUT_BORDER_COLOR = (100, 100, 100)
+MARGIN = 20
+
+SCALE_FACTOR = (WINDOW_HEIGHT - MENU_HEIGHT - INPUT_HEIGHT - 2 * MARGIN)/max(WINDOW_HEIGHT-MARGIN, WINDOW_WIDTH - 2 * MARGIN)
 
 # Primitive buttons configuration\ n
 
-MENU_ITEMS = ["Open", "Triangle", "Rectangle"]
+MENU_ITEMS = ["Open", "Triangle", "Rectangle", "Rotate", "Apply"]
 BUTTON_PADDING = 10
 BUTTON_SPACING = 10
 
 
-def load_mesh(filepath):
-    mesh = HalfEdgeMesh()
-    mesh.load_obj(filepath)
-    return mesh
+class Interface():
+    def __init__(self, pygame):
+        self.pygame = pygame
+        pass
 
 
-def open_obj():
-    file_path = filedialog.askopenfilename(title="Open OBJ File",
-                                           filetypes=[("OBJ Files", "*.obj")])
-    if file_path:
-        try:
-            mesh = load_mesh(file_path)
-            project = compute_projection(mesh.vertices, WINDOW_WIDTH, WINDOW_HEIGHT)
-            return mesh, project
-        except Exception as e:
-            print(f"Failed to load mesh: {e}")
+    def load_mesh(self, filepath):
+        mesh = HalfEdgeMesh()
+        mesh.load_obj(filepath)
+        return mesh
 
-def compute_projection(vertices, width, height, margin=20):
-    """
-    Compute 2D projection mapping for mesh vertices.
-    """
-    xs = [v.position[0] for v in vertices]
-    ys = [v.position[1] for v in vertices]
-    if not xs or not ys:
-        return lambda v: (0, 0)
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    span_x = max_x - min_x if max_x - min_x != 0 else 1
-    span_y = max_y - min_y if max_y - min_y != 0 else 1
-    scale_x = (width - 2 * margin) / span_x
-    scale_y = (height - 2 * margin - MENU_HEIGHT) / span_y
-    scale = min(scale_x, scale_y)
+    def compute_extents(self, vertices):
+        xs = [v.position[0] for v in vertices]
+        ys = [v.position[1] for v in vertices]
+        if not xs or not ys:
+            return 3.0, 3.0
+        span_x = max(xs) - min(xs) or 3.0
+        span_y = max(ys) - min(ys) or 3.0
+        return span_x+2, span_y+2
 
-    def project(v):
-        x, y, _ = v.position
-        sx = (x - min_x) * scale + margin
-        sy = height - MENU_HEIGHT - ((y - min_y) * scale + margin)
-        return int(sx), int(sy + MENU_HEIGHT)
+    def open_obj(self):
+        file_path = filedialog.askopenfilename(title="Open OBJ File",
+                                               filetypes=[("OBJ Files", "*.obj")])
+        if file_path:
+            try:
+                mesh = self.load_mesh(file_path)
+                return mesh
+            except Exception as e:
+                print(f"Failed to load mesh: {e}")
 
-    return project
+    def compute_projection(self, vertices, width, height, units_x, units_y):
+        xs = [v.position[0] for v in vertices]
+        ys = [v.position[1] for v in vertices]
+        if not xs or not ys:
+            return lambda v: (0, 0)
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        # Escala para mapear 'units_x' ao espaço de desenho
+        scale_x = (width - 2 * MARGIN) / (units_x)
+        scale_y = (height - MENU_HEIGHT - INPUT_HEIGHT - 2 * MARGIN) / (units_y)
 
+        def project(v):
+            x, y, _ = v.position
+            px = (x - min_x) * scale_x + MARGIN
+            py = (y - min_y) * scale_y + MARGIN
+            sx = int(px)
+            sy = int(height - INPUT_HEIGHT - (py + MENU_HEIGHT))
+            return sx, sy
 
-def create_buttons(font):
-    buttons = []
-    x = BUTTON_PADDING
-    y = (MENU_HEIGHT - font.get_height()) // 2
-    for name in MENU_ITEMS:
-        text_surf = font.render(name, True, TEXT_COLOR)
-        btn_rect = pygame.Rect(x, 0, text_surf.get_width() + 2 * BUTTON_PADDING, MENU_HEIGHT)
-        buttons.append((name, btn_rect, text_surf))
-        x += btn_rect.width + BUTTON_SPACING
-    return buttons
+        return project
 
+    def screen_to_model(self, screen_pos, vertices, width, height, units_x, units_y, margin=MARGIN):
+        """
+        Converte uma posição de tela (pixels) para coordenadas do modelo.
+        """
+        # Calcula limites do modelo
+        xs = [v.position[0] for v in vertices]
+        ys = [v.position[1] for v in vertices]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
 
-def main():
-    #if len(sys.argv) < 2:
-    #    print("Usage: python pygame_halfedge_ui.py <path_to_obj_file>")
-    #    sys.exit(1)
+        # Escalas de projeção usadas
+        scale_x = (width - 2*margin) / units_x
+        scale_y = (height - MENU_HEIGHT - INPUT_HEIGHT - 2*margin) / units_y
 
-    #obj_path = sys.argv[1]
-    #if not os.path.exists(obj_path):
-    #    print(f"File not found: {obj_path}")
-    #    sys.exit(1)
+        mx, my = screen_pos
+        # Reverte X: remove margem e divide pela escala
+        model_x = (mx - margin) / scale_x + min_x
+        # Reverte Y: inverte o eixo, remove offset de menu+input e divide pela escala
+        raw_y = (height - INPUT_HEIGHT - MENU_HEIGHT) - my
+        model_y = raw_y / scale_y + min_y
 
-    mesh = None
-
-
-
-    pygame.init()
-    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-    pygame.display.set_caption("Half-Edge Mesh Viewer")
-    clock = pygame.time.Clock()
-    font = pygame.font.SysFont(None, 24)
-
-    #project = compute_projection(mesh.vertices, WINDOW_WIDTH, WINDOW_HEIGHT)
-    buttons = create_buttons(font)
-
-    running = True
-    while running:
-        mouse_pos = pygame.mouse.get_pos()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                for name, rect, _ in buttons:
-                    if rect.collidepoint(mouse_pos):
-                        match name:
-                            case "Open":
-                                mesh, project = open_obj()
-                            case "Triangle":
-                                print(f"Button '{name}' clicked - functionality not yet implemented")
-                            case "Rectangle":
-                                print(f"Button '{name}' clicked - functionality not yet implemented")
-                    
-        # Draw background
-        screen.fill(BG_COLOR)
-
-        # Draw menu bar
-        pygame.draw.rect(screen, MENU_COLOR, (0, 0, WINDOW_WIDTH, MENU_HEIGHT))
-        for name, rect, text_surf in buttons:
-            color = BUTTON_HOVER_COLOR if rect.collidepoint(mouse_pos) else BUTTON_COLOR
-            pygame.draw.rect(screen, color, rect)
-            screen.blit(text_surf, (rect.x + BUTTON_PADDING, (MENU_HEIGHT - text_surf.get_height()) // 2))
-
-        if mesh:
-            # Draw edges
-            for (o_idx, d_idx), he in mesh.edge_map.items():
-                # Draw each directed edge once
-                if o_idx < d_idx:
-                    v1 = mesh.vertices[o_idx - 1]
-                    v2 = mesh.vertices[d_idx - 1]
-                    p1 = project(v1)
-                    p2 = project(v2)
-                    pygame.draw.line(screen, EDGE_COLOR, p1, p2, 2)
-
-            # Draw vertices
-            for v in mesh.vertices:
-                p = project(v)
-                pygame.draw.circle(screen, VERTEX_COLOR, p, 5)
-
-        pygame.display.flip()
-        clock.tick(FPS)
-
-    pygame.quit()
+        return (model_x, model_y)
 
 
-if __name__ == '__main__':
-    main()
+    def screen_to_model(self, screen_pos, units_x=3, units_y=3, width=WINDOW_WIDTH, height=WINDOW_HEIGHT, margin=MARGIN):
+        mx, my = screen_pos
+        scale_x = (width - 2*margin)/units_x
+        scale_y = (height - MENU_HEIGHT - INPUT_HEIGHT - 2*margin)/units_y
+        model_x = (mx - margin)/scale_x
+        raw_y = (height - INPUT_HEIGHT - MENU_HEIGHT) - my
+        model_y = raw_y/scale_y
+        return (model_x, model_y)
+
+
+    def create_buttons(self, font):
+        buttons = []
+        x = BUTTON_PADDING
+        y = (MENU_HEIGHT - font.get_height()) // 2
+        for name in MENU_ITEMS:
+            text_surf = font.render(name, True, TEXT_COLOR)
+            btn_rect = self.pygame.Rect(x, 0, text_surf.get_width() + 2 * BUTTON_PADDING, MENU_HEIGHT)
+            buttons.append((name, btn_rect, text_surf))
+            x += btn_rect.width + BUTTON_SPACING
+        return buttons
+
+    def recalculate_params(self, mesh, input_values):
+        span_x, span_y = self.compute_extents(mesh.vertices)
+        desired_x, desired_y = span_x, span_y
+        input_values['UX'] = f"{desired_x:.2f}"
+        input_values['UY'] = f"{desired_y:.2f}"
+        first_focus = {'UX': True, 'UY': True}
+                                
+        project = self.compute_projection(mesh.vertices, WINDOW_WIDTH, WINDOW_HEIGHT,desired_x, desired_y*SCALE_FACTOR)
+        return first_focus, project
+
+    def compute_center(self, vertices):
+        if not vertices:
+            return (0, 0, 0)
+        n = len(vertices)
+        sum_x = sum(v.position[0] for v in vertices)
+        sum_y = sum(v.position[1] for v in vertices)
+        sum_z = sum(v.position[2] for v in vertices)
+        return (sum_x / n, sum_y / n, sum_z / n)
