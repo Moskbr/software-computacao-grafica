@@ -114,14 +114,27 @@ def main():
                                         transformacoes.push(matriz.rotacao(angle_rad))
                                     else:
                                         print("Invalid angle or mesh not loaded.")
+                            case "Scale":
+                                if op_enable:
+                                    # Abre uma janela para entrada de escala
+                                    root = tk.Tk()
+                                    root.withdraw()
+                                    sx = tk.simpledialog.askfloat("Scale", "Enter scale factor for X:")
+                                    sy = tk.simpledialog.askfloat("Scale", "Enter scale factor for Y:")
+                                    if sx is not None and sy is not None and mesh:
+                                        transformacoes.push(matriz.escalacao(sx, sy))
+                                    else:
+                                        print("Invalid scale factors or mesh not loaded.")
                             case "Apply":
                                 if mesh and transformacoes:
                                     R = matriz.resultante(transformacoes, center)
                                     for v in mesh.vertices:
                                         x_new, y_new, _ = R @ np.array([v.position[0], v.position[1], 1])
+                                        print(v.position, "->", (x_new, y_new))
                                         v.position = (x_new, y_new, v.position[2])    
                                     # Recalcula os parâmetros de entrada
-                                    first_focus, project = interface.recalculate_params(mesh, input_values)
+                                    project, input_values = interface.reproject(input_values, mesh)
+                                    transformacoes = matriz.pilha_transformacoes(center)
                                     print("Transformations applied.")
 
                 # Input field focus

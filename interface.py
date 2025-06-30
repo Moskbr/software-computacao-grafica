@@ -27,7 +27,7 @@ SCALE_FACTOR = (WINDOW_HEIGHT - MENU_HEIGHT - INPUT_HEIGHT - 2 * MARGIN)/max(WIN
 
 # Primitive buttons configuration\ n
 
-MENU_ITEMS = ["Open", "Triangle", "Rectangle", "Rotate", "Apply"]
+MENU_ITEMS = ["Open", "Triangle", "Rectangle", "Rotate", "Scale", "Apply"]
 BUTTON_PADDING = 10
 BUTTON_SPACING = 10
 
@@ -35,6 +35,7 @@ BUTTON_SPACING = 10
 class Interface():
     def __init__(self, pygame):
         self.pygame = pygame
+        self.input_values = {'UX': f"{3}", 'UY': f"{3}"}
         pass
 
 
@@ -43,14 +44,22 @@ class Interface():
         mesh.load_obj(filepath)
         return mesh
 
-    def compute_extents(self, vertices):
+    def compute_extents(self, vertices, units_x = None, units_y = None):
         xs = [v.position[0] for v in vertices]
         ys = [v.position[1] for v in vertices]
         if not xs or not ys:
             return 3.0, 3.0
+        
         span_x = max(xs) - min(xs) or 3.0
         span_y = max(ys) - min(ys) or 3.0
-        return span_x+2, span_y+2
+        
+        if units_x and units_y:
+            if span_x > units_x or span_y > units_y:
+                return span_x, span_y
+            else:
+                return units_x, units_y
+        return span_x, span_y
+
 
     def open_obj(self):
         file_path = filedialog.askopenfilename(title="Open OBJ File",
@@ -146,3 +155,18 @@ class Interface():
         sum_y = sum(v.position[1] for v in vertices)
         sum_z = sum(v.position[2] for v in vertices)
         return (sum_x / n, sum_y / n, sum_z / n)
+    
+    def reproject(self, input_values, mesh):
+        desired_x = float(input_values['UX'])
+        desired_y = float(input_values['UY'])
+        # 3) recomputa projeção para redesenhar
+        span_x, span_y = self.compute_extents(mesh.vertices, desired_x, desired_y)
+        project = self.compute_projection(
+            mesh.vertices,
+            WINDOW_WIDTH, WINDOW_HEIGHT,
+            span_x, span_y
+        )
+
+        input_values['UX'] = f"{span_x:.2f}"
+        input_values['UY'] = f"{span_y:.2f}"
+        return project, input_values
